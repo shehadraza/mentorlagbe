@@ -1,13 +1,15 @@
 
 import express from "express";
-import { createTuitionRouter } from "./routes/tuition.routes.js";
 import cors from "cors";
 import dotenv from "dotenv";
+import type { Db } from "mongodb";
+
+import { createTuitionRouter } from "./routes/tuition.routes.js";
 import { createUploadRouter } from "./routes/upload.routes.js";
 import { createApplicationRouter } from "./routes/application.routes.js";
-import type { Db } from "mongodb";
 import { createUserRouter } from "./routes/user.routes.js";
 import { createPaymentRouter } from "./routes/payment.routes.js";
+import { createAdminRouter } from "./routes/admin.routes.js";
 
 import { toNodeHandler } from "better-auth/node";
 
@@ -16,17 +18,18 @@ import {
   getMongoClient,
   initializeDatabaseIndexes,
 } from "./config/database.js";
+
 import { createAuth } from "./auth/auth.js";
 import { createAuthMiddleware } from "./middleware/auth.middleware.js";
 
-// Load environment variables
 dotenv.config();
+
+console.log("Stripe secret loaded:", Boolean(process.env.STRIPE_SECRET_KEY));
 
 const app = express();
 
 let database: Db | null = null;
 
-// CORS must allow credentials for Better Auth cookies.
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
@@ -34,7 +37,7 @@ app.use(
   }),
 );
 
-// Basic API health-check
+// API health check.
 app.get("/", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -42,7 +45,7 @@ app.get("/", (_req, res) => {
   });
 });
 
-// MongoDB health-check
+// MongoDB health check.
 app.get("/health/db", async (_req, res) => {
   try {
     if (!database) {
@@ -69,25 +72,24 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
-// Start the server after connecting to MongoDB
 async function startServer() {
   try {
     database = await connectDatabase();
+
     await initializeDatabaseIndexes(database);
 
-    // Initialize Better Auth after MongoDB is connected.
     const auth = createAuth(database, getMongoClient());
-
-    // Initialize JWT authentication and role middleware.
     const authMiddleware = createAuthMiddleware(database);
 
-    // Better Auth handler must be registered before express.json().
+    // Better Auth must be registered before express.json().
     app.all("/api/auth/*splat", toNodeHandler(auth));
 
-    // Parse JSON for our other API routes.
+    // Stripe webhook must receive the original raw request body.
+    app.use("/api/payments", createPaymentRouter(database));
+
+    // Parse JSON for the remaining API routes.
     app.use(express.json());
 
-    // Protected route: returns the currently authenticated user.
     app.get(
       "/api/me",
       authMiddleware.verifyToken,
@@ -98,11 +100,13 @@ async function startServer() {
         });
       },
     );
+
     app.use("/api/users", createUserRouter(database));
     app.use("/api/tuitions", createTuitionRouter(database));
     app.use("/api/applications", createApplicationRouter(database));
-    app.use("/api/payments", createPaymentRouter(database));
     app.use("/api/uploads", createUploadRouter(database));
+    app.use("/api/admin", createAdminRouter(database));
+
     const PORT = process.env.PORT || 5000;
 
     app.listen(PORT, () => {
