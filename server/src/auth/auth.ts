@@ -32,7 +32,6 @@ export function createAuth(database: Db, client: MongoClient) {
         _id: "id",
       },
 
-      // Transactions will be implemented separately.
       transaction: false,
     },
 
@@ -49,6 +48,14 @@ export function createAuth(database: Db, client: MongoClient) {
 
     baseURL: process.env.BETTER_AUTH_URL || "http://localhost:5000",
     secret,
+
+    advanced: {
+      defaultCookieAttributes: {
+        sameSite: "none",
+        secure: true,
+        httpOnly: true,
+      },
+    },
 
     database: databaseAdapter,
 
