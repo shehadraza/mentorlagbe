@@ -115,13 +115,14 @@ const roleConfig: Record<
     ],
   },
 
+  
   admin: {
     label: "Administrator",
     heading: "Control center",
     description: "Platform operations and management.",
     items: [
       {
-        label: "Overview",
+        label: "Admin Panel",
         href: "/dashboard/admin",
         icon: LayoutDashboard,
       },
@@ -136,12 +137,18 @@ const roleConfig: Record<
         icon: BookMarked,
       },
       {
+        label: "Applications",
+        href: "/dashboard/admin/applications",
+        icon: ClipboardList,
+      },
+      {
         label: "Transactions",
         href: "/dashboard/admin/transactions",
         icon: Wallet,
       },
     ],
   },
+
 };
 
 function getDashboardPath(role?: string) {

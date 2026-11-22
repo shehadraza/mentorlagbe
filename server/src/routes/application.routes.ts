@@ -176,8 +176,6 @@ export function createApplicationRouter(database: Db) {
   });
 
   // Student: View their own applications.
-  
-  // Student: View their own applications.
   router.get("/mine", auth.verifyToken, auth.verifyStudent, async (_req, res) => {
     try {
       const user = res.locals.authUser;
@@ -231,7 +229,8 @@ export function createApplicationRouter(database: Db) {
       });
     }
   });
-      // Student: Cancel a pending application.
+
+  // Student: Cancel a pending application.
   router.delete(
     "/:id",
     auth.verifyToken,
@@ -319,7 +318,7 @@ export function createApplicationRouter(database: Db) {
     }
   });
 
-  // Tutor: Accept or reject an application for their own tuition.
+  // Tutor: Accept or reject a pending application for an active tuition.
   router.patch(
     "/:id/status",
     auth.verifyToken,
@@ -328,12 +327,13 @@ export function createApplicationRouter(database: Db) {
       try {
         const user = res.locals.authUser;
         const id = req.params.id;
-        const { status } = req.body ?? {};
+        const requestedStatus: unknown = req.body?.status;
 
         if (
           typeof id !== "string" ||
           !ObjectId.isValid(id) ||
-          !["accepted", "rejected"].includes(status)
+          (requestedStatus !== "accepted" &&
+            requestedStatus !== "rejected")
         ) {
           res.status(400).json({
             success: false,
@@ -342,20 +342,18 @@ export function createApplicationRouter(database: Db) {
           return;
         }
 
-        const result = await applications.updateOne(
+        const applicationId = new ObjectId(id);
+
+        // Confirm that this application belongs to the current tutor.
+        const application = await applications.findOne(
           {
-            _id: new ObjectId(id),
+            _id: applicationId,
             tutorEmail: user.email,
           },
-          {
-            $set: {
-              status,
-              updatedAt: new Date(),
-            },
-          }
+          { projection: { tuitionId: 1, status: 1 } }
         );
 
-        if (result.matchedCount === 0) {
+        if (!application) {
           res.status(404).json({
             success: false,
             message: "Application not found for your tuition posts.",
@@ -363,9 +361,56 @@ export function createApplicationRouter(database: Db) {
           return;
         }
 
+        // Only applications linked to approved and active tuitions can be reviewed.
+        if (!ObjectId.isValid(application.tuitionId)) {
+          res.status(409).json({
+            success: false,
+            message: "The related tuition is unavailable.",
+          });
+          return;
+        }
+
+        const tuition = await tuitions.findOne({
+          _id: new ObjectId(application.tuitionId),
+          tutorEmail: user.email,
+          approvalStatus: "approved",
+          isActive: true,
+        });
+
+        if (!tuition) {
+          res.status(409).json({
+            success: false,
+            message: "You cannot update applications for a tuition that is not approved and active.",
+          });
+          return;
+        }
+
+        // A decision can only be made once.
+        const result = await applications.updateOne(
+          {
+            _id: applicationId,
+            tutorEmail: user.email,
+            status: "pending",
+          },
+          {
+            $set: {
+              status: requestedStatus,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          res.status(409).json({
+            success: false,
+            message: "This application has already been reviewed.",
+          });
+          return;
+        }
+
         res.status(200).json({
           success: true,
-          message: `Application ${status} successfully.`,
+          message: `Application ${requestedStatus} successfully.`,
         });
       } catch (error) {
         console.error("Application status update failed:", error);

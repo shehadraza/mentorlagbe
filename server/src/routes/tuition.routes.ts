@@ -318,6 +318,7 @@ export function createTuitionRouter(database: Db) {
   );
 
   // Admin: Approve or reject tuition.
+    // Admin: Approve or reject pending tuition only.
   router.patch(
     "/:id/moderate",
     auth.verifyToken,
@@ -325,12 +326,13 @@ export function createTuitionRouter(database: Db) {
     async (req, res) => {
       try {
         const id = req.params.id;
-        const { approvalStatus } = req.body ?? {};
+        const approvalStatus: unknown = req.body?.approvalStatus;
 
         if (
           typeof id !== "string" ||
           !ObjectId.isValid(id) ||
-          !["approved", "rejected"].includes(approvalStatus)
+          (approvalStatus !== "approved" &&
+            approvalStatus !== "rejected")
         ) {
           res.status(400).json({
             success: false,
@@ -339,15 +341,37 @@ export function createTuitionRouter(database: Db) {
           return;
         }
 
+        // Only a pending submission can be moderated.
         const result = await tuitions.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { approvalStatus, updatedAt: new Date() } }
+          {
+            _id: new ObjectId(id),
+            approvalStatus: "pending",
+          },
+          {
+            $set: {
+              approvalStatus,
+              updatedAt: new Date(),
+            },
+          }
         );
 
-        if (!result.matchedCount) {
-          res.status(404).json({
+        if (result.matchedCount === 0) {
+          const existingTuition = await tuitions.findOne(
+            { _id: new ObjectId(id) },
+            { projection: { _id: 1, approvalStatus: 1 } }
+          );
+
+          if (!existingTuition) {
+            res.status(404).json({
+              success: false,
+              message: "Tuition not found.",
+            });
+            return;
+          }
+
+          res.status(409).json({
             success: false,
-            message: "Tuition not found.",
+            message: "This tuition has already been reviewed.",
           });
           return;
         }
@@ -358,6 +382,7 @@ export function createTuitionRouter(database: Db) {
         });
       } catch (error) {
         console.error("Tuition moderation failed:", error);
+
         res.status(500).json({
           success: false,
           message: "Failed to moderate tuition.",
