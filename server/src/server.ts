@@ -107,9 +107,9 @@ async function startServer() {
     app.use("/api/uploads", createUploadRouter(database));
     app.use("/api/admin", createAdminRouter(database));
 
-    const PORT = process.env.PORT || 5000;
+    const PORT = Number(process.env.PORT) || 5000;
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log("Better Auth initialized successfully!");
       console.log("JWT authentication middleware initialized!");
       console.log(`MentorLagbe API is running on port ${PORT}`);
