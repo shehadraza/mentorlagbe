@@ -41,6 +41,12 @@ export function createAuth(database: Db, client: MongoClient) {
 
   return betterAuth({
     appName: "MentorLagbe",
+
+    trustedOrigins: [
+      process.env.CLIENT_URL || "http://localhost:3000",
+      "http://localhost:3001",
+    ],
+
     baseURL: process.env.BETTER_AUTH_URL || "http://localhost:5000",
     secret,
 
