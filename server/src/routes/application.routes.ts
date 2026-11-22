@@ -176,6 +176,8 @@ export function createApplicationRouter(database: Db) {
   });
 
   // Student: View their own applications.
+  
+  // Student: View their own applications.
   router.get("/mine", auth.verifyToken, auth.verifyStudent, async (_req, res) => {
     try {
       const user = res.locals.authUser;
@@ -185,10 +187,41 @@ export function createApplicationRouter(database: Db) {
         .sort({ appliedAt: -1 })
         .toArray();
 
+      // Fetch tutor names for all related tuition records in one query.
+      const tuitionIds = [
+        ...new Set(
+          items
+            .map((item) => item.tuitionId)
+            .filter((id) => ObjectId.isValid(id))
+        ),
+      ].map((id) => new ObjectId(id));
+
+      const relatedTuitions =
+        tuitionIds.length > 0
+          ? await tuitions
+              .find(
+                { _id: { $in: tuitionIds } },
+                { projection: { tutorName: 1 } }
+              )
+              .toArray()
+          : [];
+
+      const tutorNames = new Map(
+        relatedTuitions.map((tuition) => [
+          tuition._id.toString(),
+          tuition.tutorName,
+        ])
+      );
+
+      const enrichedItems = items.map((item) => ({
+        ...item,
+        tutorName: tutorNames.get(item.tuitionId) || "Tutor",
+      }));
+
       res.status(200).json({
         success: true,
-        applications: items,
-        total: items.length,
+        applications: enrichedItems,
+        total: enrichedItems.length,
       });
     } catch (error) {
       console.error("Student application listing failed:", error);
@@ -198,6 +231,69 @@ export function createApplicationRouter(database: Db) {
       });
     }
   });
+      // Student: Cancel a pending application.
+  router.delete(
+    "/:id",
+    auth.verifyToken,
+    auth.verifyStudent,
+    async (req, res) => {
+      try {
+        const user = res.locals.authUser;
+        const id = req.params.id;
+
+        if (typeof id !== "string" || !ObjectId.isValid(id)) {
+          res.status(400).json({
+            success: false,
+            message: "Invalid application ID.",
+          });
+          return;
+        }
+
+        const applicationId = new ObjectId(id);
+
+        const result = await applications.deleteOne({
+          _id: applicationId,
+          studentEmail: user.email,
+          status: "pending",
+        });
+
+        if (result.deletedCount === 0) {
+          const existing = await applications.findOne(
+            {
+              _id: applicationId,
+              studentEmail: user.email,
+            },
+            { projection: { status: 1 } }
+          );
+
+          if (!existing) {
+            res.status(404).json({
+              success: false,
+              message: "Application not found.",
+            });
+            return;
+          }
+
+          res.status(409).json({
+            success: false,
+            message: "Only pending applications can be cancelled.",
+          });
+          return;
+        }
+
+        res.status(200).json({
+          success: true,
+          message: "Application cancelled successfully.",
+        });
+      } catch (error) {
+        console.error("Student application cancellation failed:", error);
+        res.status(500).json({
+          success: false,
+          message: "Failed to cancel your application.",
+        });
+      }
+    }
+  );
 
   // Tutor: View applications for their own tuition posts.
   router.get("/tutor", auth.verifyToken, auth.verifyTutor, async (_req, res) => {
