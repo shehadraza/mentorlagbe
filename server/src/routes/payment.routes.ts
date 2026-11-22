@@ -254,7 +254,90 @@ export function createPaymentRouter(database: Db) {
       }
     }
   );
+     // Student/Tutor: Verify ownership and payment status of a Checkout Session.
+  router.get("/verify/:sessionId", auth.verifyToken, async (req, res) => {
+    try {
+      const user = res.locals.authUser;
+      const sessionId = req.params.sessionId;
 
+      if (
+        typeof sessionId !== "string" ||
+        !sessionId.startsWith("cs_")
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid checkout session ID.",
+        });
+        return;
+      }
+
+      if (user.role !== "student" && user.role !== "tutor") {
+        res.status(403).json({
+          success: false,
+          message: "Only students and tutors can verify Pro payments.",
+        });
+        return;
+      }
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const metadata = session.metadata;
+
+      // A user can only verify a session created for their own account.
+      if (
+        !metadata ||
+        metadata.userId !== user.id ||
+        metadata.userEmail !== user.email ||
+        metadata.userRole !== user.role ||
+        metadata.planName !== "pro"
+      ) {
+        res.status(403).json({
+          success: false,
+          message: "This checkout session does not belong to your account.",
+        });
+        return;
+      }
+
+      const expectedAmount = user.role === "student" ? 10 : 15;
+
+      if (
+        session.mode !== "payment" ||
+        session.amount_total !== expectedAmount * 100 ||
+        session.currency !== "usd"
+      ) {
+        res.status(400).json({
+          success: false,
+          message: "Checkout session details could not be verified.",
+        });
+        return;
+      }
+
+      const payment = await payments.findOne({
+        stripeSessionId: session.id,
+        userEmail: user.email,
+      });
+
+      res.status(200).json({
+        success: true,
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+        paymentRecorded: payment?.paymentStatus === "paid",
+        plan: payment?.paymentStatus === "paid" ? "pro" : user.plan,
+        message:
+          session.payment_status === "paid"
+            ? payment?.paymentStatus === "paid"
+              ? "Payment verified successfully."
+              : "Payment received. Membership activation is processing."
+            : "Payment has not been completed.",
+      });
+    } catch (error) {
+      console.error("Payment verification failed:", error);
+
+      res.status(500).json({
+        success: false,
+        message: "Unable to verify this payment right now.",
+      });
+    }
+  });
   // Student/Tutor: Create a Stripe Pro checkout session.
   router.post("/checkout", auth.verifyToken, async (req, res) => {
     try {
