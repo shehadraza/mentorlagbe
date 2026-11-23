@@ -757,7 +757,7 @@ export default function TutorApplicantsPage() {
 
                                 <div>
                                   <p className="text-[9px] font-black uppercase tracking-[0.17em] text-neutral-400">
-                                    Student's message
+                                    Student&apos;s message
                                   </p>
                                   <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-neutral-600">
                                     {application.studentNote ||

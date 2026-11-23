@@ -17,7 +17,6 @@ import {
   CalendarDays,
   Mail,
   Phone,
-  CheckCircle2,
   AlertCircle,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -44,15 +43,6 @@ type UsersApiResponse = {
     limit?: number;
     totalUsers?: number;
     totalPages?: number;
-  };
-};
-
-type RoleUpdateResponse = {
-  success?: boolean;
-  message?: string;
-  user?: {
-    id: string;
-    role: UserRole;
   };
 };
 
@@ -132,15 +122,7 @@ export default function AdminUsersPage() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-
-  const [roleDrafts, setRoleDrafts] = useState<
-    Record<string, UserRole>
-  >({});
-
-  const [updatingUserId, setUpdatingUserId] = useState("");
 
   // Load users from the protected admin API.
   const loadUsers = useCallback(async () => {
@@ -207,7 +189,8 @@ export default function AdminUsersPage() {
 
       if (result.success === false) {
         throw new Error(
-          result.message || "The server could not return the user list.",
+          result.message ||
+            "The server could not return the user list.",
         );
       }
 
@@ -220,19 +203,6 @@ export default function AdminUsersPage() {
       setTotalPages(
         Math.max(1, result.pagination?.totalPages ?? 1),
       );
-
-      // Keep draft selections synchronized with the latest server data.
-      setRoleDrafts((current) => {
-        const next = { ...current };
-
-        loadedUsers.forEach((user) => {
-          if (user.role) {
-            next[user.id] = user.role;
-          }
-        });
-
-        return next;
-      });
     } catch (err) {
       setUsers([]);
       setTotalUsers(0);
@@ -280,118 +250,10 @@ export default function AdminUsersPage() {
     loadUsers,
   ]);
 
-  // Update a user's platform role.
-  const updateUserRole = async (userId: string) => {
-    const selectedRole = roleDrafts[userId];
-
-    if (!selectedRole) {
-      setError("Please select a valid role first.");
-      return;
-    }
-
-    const existingUser = users.find(
-      (user) => user.id === userId,
-    );
-
-    if (!existingUser) {
-      setError("The selected user could not be found.");
-      return;
-    }
-
-    if (selectedRole === existingUser.role) {
-      return;
-    }
-
-    setError("");
-    setSuccessMessage("");
-    setUpdatingUserId(userId);
-
-    try {
-      const { data: tokenData, error: tokenError } =
-        await authClient.token();
-
-      if (tokenError) {
-        throw new Error(
-          "Your session could not be verified. Please sign in again.",
-        );
-      }
-
-      const token = (
-        tokenData as { token?: string } | null
-      )?.token;
-
-      if (!token) {
-        throw new Error(
-          "Authentication token is unavailable. Please sign in again.",
-        );
-      }
-
-      const response = await fetch(
-        `${API_URL}/api/users/${encodeURIComponent(userId)}/role`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            role: selectedRole,
-          }),
-        },
-      );
-
-      const result =
-        (await response.json()) as RoleUpdateResponse;
-
-      if (!response.ok || result.success === false) {
-        throw new Error(
-          result.message || "Unable to update this user's role.",
-        );
-      }
-
-      if (!result.user) {
-        throw new Error(
-          "The server did not return the updated user information.",
-        );
-      }
-
-      // Refresh the directory so role filters and pagination stay accurate.
-      await loadUsers();
-
-      setSuccessMessage(
-        result.message || "User role updated successfully.",
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while updating the role.",
-      );
-    } finally {
-      setUpdatingUserId("");
-    }
-  };
-
   const handleRoleChange = (nextRole: string) => {
     setError("");
-    setSuccessMessage("");
     setRole(nextRole);
     setPage(1);
-  };
-
-  const handleDraftChange = (
-    userId: string,
-    nextRole: UserRole,
-  ) => {
-    setRoleDrafts((current) => ({
-      ...current,
-      [userId]: nextRole,
-    }));
-
-    setError("");
-    setSuccessMessage("");
   };
 
   if (session.isPending || !session.data || !isAdmin) {
@@ -457,9 +319,8 @@ export default function AdminUsersPage() {
                 </h1>
 
                 <p className="mt-5 max-w-xl text-sm leading-7 text-[#77776F] sm:text-base">
-                  Browse the MentorLagbe community. Review account
-                  information and manage platform roles for students,
-                  tutors and administrators.
+                  Browse the MentorLagbe community and review account
+                  information for students, tutors and administrators.
                 </p>
               </div>
 
@@ -559,14 +420,14 @@ export default function AdminUsersPage() {
               </h2>
 
               <p className="mt-2 text-xs leading-6 text-[#92928A]">
-                Review accounts and manage their platform permissions.
+                Review registered accounts and their platform information.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => void loadUsers()}
-              disabled={refreshing || updatingUserId !== ""}
+              disabled={refreshing}
               className="inline-flex min-h-10 items-center justify-center gap-2 border border-[#0B0B0C]/20 px-4 text-xs font-bold uppercase tracking-[0.1em] transition-colors hover:border-[#0B0B0C] hover:bg-[#0B0B0C] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw
@@ -588,8 +449,7 @@ export default function AdminUsersPage() {
                   type="button"
                   onClick={() => handleRoleChange(filter.value)}
                   aria-pressed={active}
-                  disabled={updatingUserId !== ""}
-                  className={`min-h-10 border px-4 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`min-h-10 border px-4 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
                     active
                       ? "border-[#0B0B0C] bg-[#0B0B0C] text-[#B6FF2E]"
                       : "border-[#0B0B0C]/15 bg-white/60 text-[#77776F] hover:border-[#0B0B0C] hover:text-[#0B0B0C]"
@@ -600,24 +460,6 @@ export default function AdminUsersPage() {
               );
             })}
           </div>
-
-          {/* Success feedback */}
-          {successMessage && (
-            <motion.div
-              initial={reduceMotion ? false : { opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              role="status"
-              className="mb-5 flex items-start gap-3 border border-[#B6FF2E] bg-[#B6FF2E]/15 px-4 py-3"
-            >
-              <CheckCircle2
-                size={17}
-                className="mt-0.5 shrink-0 text-[#456900]"
-              />
-              <p className="text-sm leading-6 text-[#334B00]">
-                {successMessage}
-              </p>
-            </motion.div>
-          )}
 
           {/* Error feedback */}
           {error && (
@@ -690,7 +532,7 @@ export default function AdminUsersPage() {
               <>
                 {/* Desktop directory */}
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full min-w-[1050px] border-collapse text-left">
+                  <table className="w-full min-w-[850px] border-collapse text-left">
                     <thead>
                       <tr className="border-b border-[#0B0B0C]/10 bg-[#F3F2EE]/70">
                         <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-[0.16em] text-[#92928A]">
@@ -699,10 +541,6 @@ export default function AdminUsersPage() {
 
                         <th className="px-5 py-4 text-[9px] font-bold uppercase tracking-[0.16em] text-[#92928A]">
                           Role
-                        </th>
-
-                        <th className="px-5 py-4 text-[9px] font-bold uppercase tracking-[0.16em] text-[#92928A]">
-                          Manage role
                         </th>
 
                         <th className="px-5 py-4 text-[9px] font-bold uppercase tracking-[0.16em] text-[#92928A]">
@@ -720,264 +558,161 @@ export default function AdminUsersPage() {
                     </thead>
 
                     <tbody>
-                      {users.map((user, index) => {
-                        const selectedRole =
-                          roleDrafts[user.id] ??
-                          user.role ??
-                          "student";
-
-                        const isUpdating =
-                          updatingUserId === user.id;
-
-                        const hasChanges =
-                          selectedRole !== user.role;
-
-                        return (
-                          <motion.tr
-                            key={user.id}
-                            initial={
-                              reduceMotion
-                                ? false
-                                : { opacity: 0, y: 8 }
-                            }
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{
-                              duration: 0.3,
-                              delay: reduceMotion ? 0 : index * 0.035,
-                            }}
-                            className="border-b border-[#0B0B0C]/[0.07] transition-colors last:border-0 hover:bg-[#B6FF2E]/[0.07]"
-                          >
-                            <td className="px-6 py-5">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#0B0B0C]/10 bg-[#F3F2EE] text-xs font-black">
-                                  {getInitials(user.name)}
-                                </div>
-
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-bold">
-                                    {user.name || "Unnamed user"}
-                                  </p>
-
-                                  <p className="mt-1 text-[10px] text-[#92928A]">
-                                    ID: {user.id}
-                                  </p>
-                                </div>
+                      {users.map((user, index) => (
+                        <motion.tr
+                          key={user.id}
+                          initial={
+                            reduceMotion
+                              ? false
+                              : { opacity: 0, y: 8 }
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            duration: 0.3,
+                            delay: reduceMotion ? 0 : index * 0.035,
+                          }}
+                          className="border-b border-[#0B0B0C]/[0.07] transition-colors last:border-0 hover:bg-[#B6FF2E]/[0.07]"
+                        >
+                          <td className="px-6 py-5">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#0B0B0C]/10 bg-[#F3F2EE] text-xs font-black">
+                                {getInitials(user.name)}
                               </div>
-                            </td>
 
-                            <td className="px-5 py-5">
-                              <span
-                                className={`inline-flex border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] ${getRoleStyle(user.role)}`}
-                              >
-                                {user.role || "Unknown"}
-                              </span>
-                            </td>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold">
+                                  {user.name || "Unnamed user"}
+                                </p>
 
-                            <td className="px-5 py-5">
-                              <div className="flex items-center gap-2">
-                                <select
-                                  aria-label={`Change role for ${user.name || user.email || "user"}`}
-                                  value={selectedRole}
-                                  onChange={(event) =>
-                                    handleDraftChange(
-                                      user.id,
-                                      event.target.value as UserRole,
-                                    )
-                                  }
-                                  disabled={isUpdating || updatingUserId !== ""}
-                                  className="min-h-9 border border-[#0B0B0C]/15 bg-white px-2 text-xs outline-none focus:border-[#0B0B0C] disabled:opacity-50"
-                                >
-                                  <option value="student">Student</option>
-                                  <option value="tutor">Tutor</option>
-                                  <option value="admin">Admin</option>
-                                </select>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void updateUserRole(user.id)
-                                  }
-                                  disabled={
-                                    !hasChanges ||
-                                    isUpdating ||
-                                    updatingUserId !== ""
-                                  }
-                                  className="inline-flex min-h-9 items-center justify-center border border-[#0B0B0C] bg-[#B6FF2E] px-3 text-[9px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-[#0B0B0C] hover:text-[#B6FF2E] disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {isUpdating ? "Saving..." : "Update"}
-                                </button>
+                                <p className="mt-1 text-[10px] text-[#92928A]">
+                                  ID: {user.id}
+                                </p>
                               </div>
-                            </td>
+                            </div>
+                          </td>
 
-                            <td className="px-5 py-5">
-                              <p className="max-w-[190px] truncate text-xs text-[#55554F]">
-                                {user.email || "No email"}
-                              </p>
+                          <td className="px-5 py-5">
+                            <span
+                              className={`inline-flex border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.1em] ${getRoleStyle(user.role)}`}
+                            >
+                              {user.role || "Unknown"}
+                            </span>
+                          </td>
 
-                              <p className="mt-1 text-[10px] text-[#92928A]">
-                                {user.phone || "No phone number"}
-                              </p>
-                            </td>
+                          <td className="px-5 py-5">
+                            <p className="max-w-[190px] truncate text-xs text-[#55554F]">
+                              {user.email || "No email"}
+                            </p>
 
-                            <td className="px-5 py-5">
-                              <span className="text-xs font-medium text-[#55554F]">
-                                {user.plan || "Free"}
-                              </span>
-                            </td>
+                            <p className="mt-1 text-[10px] text-[#92928A]">
+                              {user.phone || "No phone number"}
+                            </p>
+                          </td>
 
-                            <td className="px-5 py-5">
-                              <span className="text-xs text-[#77776F]">
-                                {formatDate(user.createdAt)}
-                              </span>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
+                          <td className="px-5 py-5">
+                            <span className="text-xs font-medium text-[#55554F]">
+                              {user.plan || "Free"}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-5">
+                            <span className="text-xs text-[#77776F]">
+                              {formatDate(user.createdAt)}
+                            </span>
+                          </td>
+                        </motion.tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile directory */}
                 <div className="divide-y divide-[#0B0B0C]/[0.08] md:hidden">
-                  {users.map((user, index) => {
-                    const selectedRole =
-                      roleDrafts[user.id] ??
-                      user.role ??
-                      "student";
+                  {users.map((user, index) => (
+                    <motion.article
+                      key={user.id}
+                      initial={
+                        reduceMotion
+                          ? false
+                          : { opacity: 0, y: 8 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.3,
+                        delay: reduceMotion ? 0 : index * 0.035,
+                      }}
+                      className="p-4 sm:p-5"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#0B0B0C]/10 bg-[#F3F2EE] text-xs font-black">
+                          {getInitials(user.name)}
+                        </div>
 
-                    const isUpdating =
-                      updatingUserId === user.id;
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-bold">
+                              {user.name || "Unnamed user"}
+                            </h3>
 
-                    const hasChanges =
-                      selectedRole !== user.role;
-
-                    return (
-                      <motion.article
-                        key={user.id}
-                        initial={
-                          reduceMotion
-                            ? false
-                            : { opacity: 0, y: 8 }
-                        }
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          duration: 0.3,
-                          delay: reduceMotion ? 0 : index * 0.035,
-                        }}
-                        className="p-4 sm:p-5"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-[#0B0B0C]/10 bg-[#F3F2EE] text-xs font-black">
-                            {getInitials(user.name)}
+                            <span
+                              className={`inline-flex border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${getRoleStyle(user.role)}`}
+                            >
+                              {user.role || "Unknown"}
+                            </span>
                           </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-sm font-bold">
-                                {user.name || "Unnamed user"}
-                              </h3>
+                          <p className="mt-1 break-all text-xs text-[#77776F]">
+                            {user.email || "No email"}
+                          </p>
 
-                              <span
-                                className={`inline-flex border px-2 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${getRoleStyle(user.role)}`}
-                              >
-                                {user.role || "Unknown"}
-                              </span>
-                            </div>
-
-                            <p className="mt-1 break-all text-xs text-[#77776F]">
-                              {user.email || "No email"}
-                            </p>
-
-                            <div className="mt-4 grid grid-cols-2 gap-3">
-                              <div>
-                                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
-                                  <Phone size={11} />
-                                  Phone
-                                </p>
-
-                                <p className="mt-1 break-words text-xs text-[#55554F]">
-                                  {user.phone || "Not provided"}
-                                </p>
-                              </div>
-
-                              <div>
-                                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
-                                  <CalendarDays size={11} />
-                                  Joined
-                                </p>
-
-                                <p className="mt-1 text-xs text-[#55554F]">
-                                  {formatDate(user.createdAt)}
-                                </p>
-                              </div>
-
-                              <div>
-                                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
-                                  Plan
-                                </p>
-
-                                <p className="mt-1 text-xs text-[#55554F]">
-                                  {user.plan || "Free"}
-                                </p>
-                              </div>
-
-                              <div>
-                                <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
-                                  <Mail size={11} />
-                                  Account ID
-                                </p>
-
-                                <p className="mt-1 truncate text-xs text-[#55554F]">
-                                  {user.id}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Mobile role management */}
-                            <div className="mt-5 border-t border-[#0B0B0C]/10 pt-4">
-                              <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[#92928A]">
-                                Manage account role
+                          <div className="mt-4 grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
+                                <Phone size={11} />
+                                Phone
                               </p>
 
-                              <div className="flex gap-2">
-                                <select
-                                  aria-label={`Change role for ${user.name || user.email || "user"}`}
-                                  value={selectedRole}
-                                  onChange={(event) =>
-                                    handleDraftChange(
-                                      user.id,
-                                      event.target.value as UserRole,
-                                    )
-                                  }
-                                  disabled={isUpdating || updatingUserId !== ""}
-                                  className="min-h-10 min-w-0 flex-1 border border-[#0B0B0C]/15 bg-white px-3 text-xs outline-none focus:border-[#0B0B0C] disabled:opacity-50"
-                                >
-                                  <option value="student">Student</option>
-                                  <option value="tutor">Tutor</option>
-                                  <option value="admin">Admin</option>
-                                </select>
+                              <p className="mt-1 break-words text-xs text-[#55554F]">
+                                {user.phone || "Not provided"}
+                              </p>
+                            </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void updateUserRole(user.id)
-                                  }
-                                  disabled={
-                                    !hasChanges ||
-                                    isUpdating ||
-                                    updatingUserId !== ""
-                                  }
-                                  className="min-h-10 border border-[#0B0B0C] bg-[#B6FF2E] px-4 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-[#0B0B0C] hover:text-[#B6FF2E] disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  {isUpdating ? "Saving..." : "Update"}
-                                </button>
-                              </div>
+                            <div>
+                              <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
+                                <CalendarDays size={11} />
+                                Joined
+                              </p>
+
+                              <p className="mt-1 text-xs text-[#55554F]">
+                                {formatDate(user.createdAt)}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
+                                Plan
+                              </p>
+
+                              <p className="mt-1 text-xs text-[#55554F]">
+                                {user.plan || "Free"}
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#92928A]">
+                                <Mail size={11} />
+                                Account ID
+                              </p>
+
+                              <p className="mt-1 truncate text-xs text-[#55554F]">
+                                {user.id}
+                              </p>
                             </div>
                           </div>
                         </div>
-                      </motion.article>
-                    );
-                  })}
+                      </div>
+                    </motion.article>
+                  ))}
                 </div>
               </>
             )}
@@ -995,7 +730,7 @@ export default function AdminUsersPage() {
                 onClick={() =>
                   setPage((current) => Math.max(1, current - 1))
                 }
-                disabled={page <= 1 || loading || updatingUserId !== ""}
+                disabled={page <= 1 || loading}
                 className="inline-flex min-h-10 items-center gap-2 border border-[#0B0B0C]/20 px-4 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors hover:bg-[#0B0B0C] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#0B0B0C]"
               >
                 <ChevronLeft size={14} />
@@ -1013,11 +748,7 @@ export default function AdminUsersPage() {
                     Math.min(totalPages, current + 1),
                   )
                 }
-                disabled={
-                  page >= totalPages ||
-                  loading ||
-                  updatingUserId !== ""
-                }
+                disabled={page >= totalPages || loading}
                 className="inline-flex min-h-10 items-center gap-2 border border-[#0B0B0C]/20 px-4 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors hover:bg-[#0B0B0C] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[#0B0B0C]"
               >
                 Next

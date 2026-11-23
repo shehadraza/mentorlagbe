@@ -1,13 +1,9 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-import { authClient } from "@/lib/auth-client";
+import { useEffect } from "react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
-type Theme = "light" | "dark" | "system";
+type Theme = "light" | "dark";
 
 type SettingsUpdatedEvent = CustomEvent<{
   appearance?: {
@@ -15,22 +11,15 @@ type SettingsUpdatedEvent = CustomEvent<{
   };
 }>;
 
+const THEME_STORAGE_KEY = "mentorlagbe-theme-preference";
+
 function applyTheme(theme: Theme) {
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-
-  document.documentElement.setAttribute(
-    "data-theme",
-    isDark ? "dark" : "light"
-  );
-
-  localStorage.setItem("mentorlagbe-theme-preference", theme);
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
 function isValidTheme(value: unknown): value is Theme {
-  return value === "light" || value === "dark" || value === "system";
+  return value === "light" || value === "dark";
 }
 
 export default function ThemeProvider({
@@ -38,72 +27,22 @@ export default function ThemeProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const themeRevision = useRef(0);
-
-  const loadSavedTheme = useCallback(async () => {
-    const requestRevision = themeRevision.current;
-
-    const localTheme = localStorage.getItem(
-      "mentorlagbe-theme-preference"
-    );
-
-    if (isValidTheme(localTheme)) {
-      applyTheme(localTheme);
-    }
-
-    try {
-      const tokenResult = await authClient.token();
-      const token = tokenResult.data?.token;
-
-      if (!token) return;
-
-      const response = await fetch(
-        `${API_URL}/api/users/me/settings`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) return;
-
-      const result = await response.json();
-      const savedTheme = result.settings?.appearance?.theme;
-
-      if (
-        result.success &&
-        isValidTheme(savedTheme) &&
-        themeRevision.current === requestRevision
-      ) {
-        applyTheme(savedTheme);
-      }
-    } catch {
-      // Keep the currently applied theme if loading fails.
-    }
-  }, []);
-
   useEffect(() => {
-    void loadSavedTheme();
+    // First visit defaults to Light Mode.
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+
+    if (isValidTheme(savedTheme)) {
+      applyTheme(savedTheme);
+    } else {
+      applyTheme("light");
+    }
 
     const handleSettingsUpdate = (event: Event) => {
       const customEvent = event as SettingsUpdatedEvent;
       const theme = customEvent.detail?.appearance?.theme;
 
       if (isValidTheme(theme)) {
-        themeRevision.current += 1;
         applyTheme(theme);
-      }
-    };
-
-    const handleSystemThemeChange = () => {
-      const savedTheme = localStorage.getItem(
-        "mentorlagbe-theme-preference"
-      );
-
-      if (savedTheme === "system") {
-        applyTheme("system");
       }
     };
 
@@ -112,27 +51,13 @@ export default function ThemeProvider({
       handleSettingsUpdate
     );
 
-    const mediaQuery = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    );
-
-    mediaQuery.addEventListener(
-      "change",
-      handleSystemThemeChange
-    );
-
     return () => {
       window.removeEventListener(
         "mentorlagbe:settings-updated",
         handleSettingsUpdate
       );
-
-      mediaQuery.removeEventListener(
-        "change",
-        handleSystemThemeChange
-      );
     };
-  }, [loadSavedTheme]);
+  }, []);
 
   return <>{children}</>;
 }

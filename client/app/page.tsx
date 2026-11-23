@@ -1276,11 +1276,7 @@ function FinalCTA() {
 /* -------------------------------------------------------------------------- */
 
 function Footer() {
-  const [currentYear, setCurrentYear] = useState<number | null>(null);
-
-  useEffect(() => {
-    setCurrentYear(new Date().getFullYear());
-  }, []);
+  const currentYear = 2026;
 
   return (
     <footer className="relative overflow-hidden bg-[#0B0B0C] text-white">

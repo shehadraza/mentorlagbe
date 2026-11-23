@@ -13,6 +13,8 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
+  Sun,
   UserRound,
   X,
 } from "lucide-react";
@@ -25,6 +27,10 @@ type MentorUser = {
   role?: "student" | "tutor" | "admin";
   image?: string | null;
 };
+
+type Theme = "light" | "dark";
+
+const THEME_STORAGE_KEY = "mentorlagbe-theme-preference";
 
 const navigation = [
   { label: "Home", href: "/" },
@@ -86,6 +92,50 @@ function UserAvatar({
   );
 }
 
+function ThemeToggle({
+  theme,
+  onToggle,
+  mobile = false,
+}: {
+  theme: Theme;
+  onToggle: () => void;
+  mobile?: boolean;
+}) {
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      title={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className={`group inline-flex shrink-0 items-center justify-center gap-2 border border-black/10 bg-white/75 text-[#0B0B0C] transition-all duration-300 hover:border-[#B6FF2E] hover:bg-[#B6FF2E] ${
+        mobile
+          ? "w-full rounded-xl px-4 py-3"
+          : "rounded-full px-3.5 py-2.5"
+      }`}
+    >
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F3F2EE] transition-transform duration-300 group-hover:rotate-12">
+        {isDark ? (
+          <Sun size={15} strokeWidth={2.2} />
+        ) : (
+          <Moon size={15} strokeWidth={2.2} />
+        )}
+      </span>
+
+      <span className="text-xs font-bold">
+        {mobile
+          ? isDark
+            ? "Switch to Light Mode"
+            : "Switch to Dark Mode"
+          : isDark
+            ? "Light"
+            : "Dark"}
+      </span>
+    </button>
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -97,6 +147,62 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [theme, setTheme] = useState<Theme>("light");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+
+    const currentTheme =
+      savedTheme === "dark" || savedTheme === "light"
+        ? savedTheme
+        : document.documentElement.getAttribute("data-theme") === "dark"
+          ? "dark"
+          : "light";
+
+    setTheme(currentTheme);
+
+    const handleThemeUpdate = () => {
+      const current =
+        document.documentElement.getAttribute("data-theme");
+
+      setTheme(current === "dark" ? "dark" : "light");
+    };
+
+    window.addEventListener(
+      "mentorlagbe:settings-updated",
+      handleThemeUpdate
+    );
+
+    return () => {
+      window.removeEventListener(
+        "mentorlagbe:settings-updated",
+        handleThemeUpdate
+      );
+    };
+  }, []);
+
+  const handleThemeToggle = () => {
+    const nextTheme: Theme =
+      theme === "dark" ? "light" : "dark";
+
+    document.documentElement.setAttribute(
+      "data-theme",
+      nextTheme
+    );
+
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    setTheme(nextTheme);
+
+    window.dispatchEvent(
+      new CustomEvent("mentorlagbe:settings-updated", {
+        detail: {
+          appearance: {
+            theme: nextTheme,
+          },
+        },
+      })
+    );
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -223,6 +329,11 @@ export default function Navbar() {
 
         {/* Desktop actions */}
         <div className="hidden items-center gap-3 lg:flex">
+          <ThemeToggle
+            theme={theme}
+            onToggle={handleThemeToggle}
+          />
+
           {isPending ? (
             <div className="h-10 w-28 animate-pulse rounded-full bg-black/[0.06]" />
           ) : user ? (
@@ -345,6 +456,14 @@ export default function Navbar() {
             className="overflow-hidden border-t border-black/[0.08] bg-[#F3F2EE]/95 backdrop-blur-2xl lg:hidden"
           >
             <div className="container-main py-5">
+              <div className="mb-4">
+                <ThemeToggle
+                  theme={theme}
+                  onToggle={handleThemeToggle}
+                  mobile
+                />
+              </div>
+
               <nav className="flex flex-col">
                 {navigation.map((item, index) => (
                   <motion.div
